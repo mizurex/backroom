@@ -3,6 +3,12 @@ backroom
 
 A tiny, minimal chat for quick Q&A sessions. Spin up a room, share the ID, and talk in real time.
 
+
+https://github.com/user-attachments/assets/ef713bc2-54a4-41bc-8616-6253d384df3a
+
+
+
+
 Quick start
 -----------
 
