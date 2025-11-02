@@ -3,6 +3,9 @@ import type { Socket } from 'socket.io';
 import { verifyToken } from './utils/jwt';
 import type { Server as HttpServer } from 'http';
 import { MessageModel } from './models/Message';
+import {createClient} from 'redis';
+import { createAdapter } from '@socket.io/redis-adapter';
+
 
 interface ServerToClientEvents {
   'room:joined': { roomId: string };
@@ -20,7 +23,21 @@ interface ClientToServerEvents {
 interface InterServerEvents {}
 interface SocketData { user: { sub: string; username: string } }
 
-export function createSocketServer(httpServer: HttpServer) {
+
+
+
+export async function createSocketServer(httpServer: HttpServer) {
+
+  const pubClient = createClient({ url: "redis://localhost:6379" });
+  const subClient = pubClient.duplicate();
+
+//redis conenction
+await pubClient.connect()
+console.log("pubClient active", pubClient);
+await subClient.connect()
+
+
+
   const io = new Server<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>(httpServer, {
     cors: { origin: process.env.CLIENT_ORIGIN || '*', credentials: true },
   });
@@ -39,6 +56,8 @@ export function createSocketServer(httpServer: HttpServer) {
       return next(new Error('Unauthorized'));
     }
   });
+
+  io.adapter(createAdapter(pubClient, subClient))
 
   io.on('connection', (socket: Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData>) => {
     const { sub: userId, username } = socket.data.user;
