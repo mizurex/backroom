@@ -1,0 +1,93 @@
+@import "tailwindcss";
+:root {
+  --bg: #f7f4ef;
+  --card: #ffffff;
+  --text: #2e2a25;
+  --muted: #6b6259;
+  --accent: #7a6cff; 
+  --border: #e4ded6;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+}
+
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.02);
+}
+
+.h {
+  margin: 0 0 12px 0;
+}
+
+.row { display: flex; gap: 8px; align-items: center; }
+.grid { display: grid; gap: 8px; }
+
+input, button {
+  font: inherit;
+}
+
+input {
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--text);
+}
+
+
+button.primary { background: var(--accent); color: white; border-color: var(--accent); }
+button.ghost { background: transparent; }
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.label { font-size: 12px; color: var(--muted); }
+.subtitle { color: var(--muted); font-size: 14px; }
+
+.chatBox {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  min-height: 200px;
+  background: #fff;
+}
+
+.msg { padding: 6px 0; }
+.msg strong { color: var(--text); }
+
+.footerNote { margin-top: 16px; font-size: 12px; color: var(--muted); }
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #222 #111;
+}
+
+
+
+::selection {
+  background: #f7f7f7;
+  color: rgb(9, 8, 8);
+}
+
+button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.scrollbar-hidden { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-hidden::-webkit-scrollbar { display: none; }
