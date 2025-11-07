@@ -17,4 +17,3 @@ export function verifyToken(token: string): {sub:string,username:string} {
 return payload;
 }
 
-

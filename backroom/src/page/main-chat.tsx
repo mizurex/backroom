@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
 import { postJson } from '@/lib/helper'
-import { LogOut, Plus, ArrowRight, UserPlus, LogIn, Copy } from 'lucide-react'
+import { LogOut, Plus, ArrowRight, UserPlus, LogIn, Copy, Quote } from 'lucide-react'
+// removed ResetIcon (quote uses lucide-react's Quote icon)
 
 type Message = { userId: string; username: string; text: string; ts: number }
 
@@ -22,6 +23,7 @@ export default function MainChat() {
   const [loginError, setLoginError] = useState(false)
   const [registerError, setRegisterError] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [quoted, setQuoted] = useState<Message | null>(null)
   useEffect(() => {
     const savedToken = localStorage.getItem('token') || ''
     const savedRoomId = localStorage.getItem('roomId') || ''
@@ -84,9 +86,11 @@ export default function MainChat() {
   function sendMessage() {
     const text = input.trim()
     if (!text || !socketRef.current || !roomId) return
-    socketRef.current.emit('room:message', { roomId, text })
+    const finalText = quoted ? `> ${quoted.username}: ${quoted.text}\n${text}` : text
+    socketRef.current.emit('room:message', { roomId, text: finalText })
     setInput('')
-  }
+    setQuoted(null)
+  } 
     
   function leaveRoom() {
     if (!socketRef.current || !roomId) return
@@ -101,6 +105,24 @@ export default function MainChat() {
     await postJson(`${API_BASE}/api/rooms/join`, { roomId: joinRoomId }, token)
     setRoomId(joinRoomId)
     localStorage.setItem('roomId', joinRoomId)
+  }
+
+  function quoteMessage(msg: Message) {
+    if (msg.userId === 'system') return
+    setQuoted(msg)
+  }
+
+  function clearQuote() {
+    setQuoted(null)
+  }
+
+  function parseQuotedText(text: string): { quote: string | null; body: string } {
+    const parts = text.split('\n')
+    const first = parts[0] ?? ''
+    if (first.startsWith('> ')) {
+      return { quote: first.slice(2), body: parts.slice(1).join('\n') }
+    }
+    return { quote: null, body: text }
   }
 
   const handleLogin = async () => {
@@ -341,14 +363,41 @@ export default function MainChat() {
                               <span className="text-xs text-neutral-600 italic">{msg.text}</span>
                             ) : (
                               <div className="space-y-1">
-                                <div className="text-xs text-neutral-500">{msg.username}</div>
-                                <div className="text-sm text-neutral-200">{msg.text}</div>
+                                <div className="text-xs text-neutral-50 border-b border-neutral-700 w-fit uppercase">{msg.username.toUpperCase()}</div>
+                                {(() => {
+                                  const parsed = parseQuotedText(msg.text)
+                                  return (
+                                    <div className="flex items-center gap-2">
+                                      <div className="text-sm text-black w-fit px-4 py-2 bg-gray-50 rounded-md">
+                                        {parsed.quote && (
+                                          <div className="mb-2 pl-2 border-l-2 border-neutral-300 text-neutral-600 text-xs">
+                                            {parsed.quote}
+                                          </div>
+                                        )}
+                                        <div>{parsed.body}</div>
+                                      </div>
+                                      <div>
+                                        <Quote className="size-3 text-neutral-400 cursor-pointer" onClick={() => quoteMessage(msg)} />
+                                      </div>
+                                    </div>
+                                  )
+                                })()}
                               </div>
                             )}
                           </div>
                         ))
                       )}
                     </div>
+                    {quoted && (
+                      <div className="mb-2 w-60">
+                        <div className="flex items-center justify-between bg-neutral-7=900 border border-neutral-700 rounded-sm p-2">
+                          <div className="text-xs text-neutral-300">
+                            <span className="uppercase text-neutral-400">{quoted.username}</span>: {quoted.text}
+                          </div>
+                          <button onClick={clearQuote} className="text-neutral-500 hover:text-neutral-300 text-xs">X</button>
+                        </div>
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       <input 
                         value={input}
