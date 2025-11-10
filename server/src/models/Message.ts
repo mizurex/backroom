@@ -15,5 +15,8 @@ const messageSchema = new Schema<MessageDocument>({
   text: { type: String, required: true },
 }, { timestamps: { createdAt: true, updatedAt: false } });
 
+// Auto-delete messages 4 hours after creation
+messageSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 4 });
+
 export const MessageModel = mongoose.model<MessageDocument>('Message', messageSchema);
 

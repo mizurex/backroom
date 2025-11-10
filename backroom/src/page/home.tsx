@@ -1,51 +1,46 @@
+import Button2 from "@/components/button2";
+import Header from "@/components/header";
 import { Link } from "react-router-dom";
 
 export default function Home() {
   return (
-    <main className="min-h-screen w-full bg-neutral-900 relative overflow-hidden font-mono">
-      <div className="absolute inset-0 opacity-[0.03]" style={{
-        backgroundImage: `repeating-linear-gradient(0deg, #fff 0px, #fff 4px, transparent 4px, transparent 8px), repeating-linear-gradient(90deg, #fff 0px, #fff 4px, transparent 4px, transparent 8px)`,
-        backgroundSize: '32px 32px'
-      }}/>
+    <main className="h-screen w-full bg-neutral-900 relative overflow-hidden font-mono overflow-y-hidden">
+      <Header />
+     <img src={"/home-bg.png"} alt="background" className="absolute inset-0 mix-blend-screen right-0 object-cover object-right-bottom opacity-70 pointer-events-none " loading="lazy" width={960} />
 
-      <div className="relative z-10 min-h-screen flex items-center justify-center p-6">
+      <div className="relative z-10  flex items-center justify-center py-40">
         <div className="w-full max-w-2xl text-center">
-          <h1 className="text-4xl sm:text-5xl font-semibold font-mono tracking-wide text-neutral-100 mb-3">
+          <h1 className="text-4xl sm:text-5xl tracking-wide text-neutral-100 mb-3 font-light">
             backroom
           </h1>
-          <p className="text-sm text-neutral-500 mb-10">
+          <p className="text-sm text-neutral-500 mb-6">
             quick groups, chat anonymously
           </p>
 
-          <div className="relative my-6">
+          <div className="relative">
             <div className="h-px w-full bg-gradient-to-r from-transparent via-neutral-800/60 to-transparent" />
           </div>
 
-          <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-8 shadow-2xl">
-            <p className="text-neutral-300 text-sm mb-6">
+          <div className=" border border-neutral-900 rounded-lg p-8 shadow-2xl">
+            <p className="text-neutral-500 text-sm mb-6">
               Spin up a private room and start chatting instantly.
             </p>
-            <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <div className="flex flex-col sm:flex-row gap-7 justify-center">
               <Link to="/chat" className="inline-flex justify-center">
-                <button className="px-6 py-3 rounded-sm bg-violet-300 hover:bg-violet-400 text-neutral-900 transition-colors">
-                  Open Chat
-                </button>
+                <Button2 text="Open Chat" />
               </Link>
+              
               <Link to="/chat" className="inline-flex justify-center">
-                <button className="px-6 py-3 rounded-sm bg-neutral-900 border border-neutral-800 text-neutral-200 hover:bg-neutral-800 transition-colors">
-                  Join a Room
-                </button>
+                <Button2 text="Join a Room" />
               </Link>
             </div>
           </div>
 
-          <div className="relative my-8">
-            <div className="h-px w-full bg-gradient-to-r from-transparent via-white to-transparent" />
+          <div className="relative ">
+            <div className="h-px w-full bg-gradient-to-r from-transparent via-neutral-600 to-transparent" />
           </div>
 
-          <div className="text-center mt-10 text-xs text-neutral-600">
-              minimal • anonymous
-          </div>
+      
         </div>
       </div>
     </main>

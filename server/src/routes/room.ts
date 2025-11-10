@@ -43,6 +43,15 @@ router.post('/leave', authenticate, async (req: AuthedRequest, res) => {
   return res.json({ roomId: room.roomId });
 });
 
+router.get('/:roomId', authenticate, async (req: AuthedRequest, res) => {
+  const { roomId } = req.params as { roomId: string };
+  const room = await RoomModel.findOne({ roomId }).lean();
+  if (!room) return res.status(404).json({ error: 'room not found' });
+  const ownerId = String(room.owner);
+  const isOwner = ownerId === req.user!.sub;
+  return res.json({ roomId, ownerId, isOwner });
+});
+
 router.get('/:roomId/messages', authenticate, async (req: AuthedRequest, res) => {
   const { roomId } = req.params as { roomId: string };
   const limit = Math.min(Number(req.query.limit) || 50, 200);

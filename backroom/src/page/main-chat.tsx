@@ -2,10 +2,18 @@ import { useEffect, useRef, useState } from 'react'
 import { io } from 'socket.io-client'
 import type { Socket } from 'socket.io-client'
 import { postJson } from '@/lib/helper'
-import { LogOut, Plus, ArrowRight, UserPlus, LogIn, Copy, Quote } from 'lucide-react'
+// icons used within child components; none needed directly here
+import AuthForm from '@/components/chat/AuthForm'
+import RoomGate from '@/components/chat/RoomGate'
+import ChatHeader from '@/components/chat/ChatHeader'
+import MembersPanel from '@/components/chat/MembersPanel'
+import MessagesList from '@/components/chat/MessagesList'
+import MessageInput from '@/components/chat/MessageInput'
+import type { ChatMessage } from '@/types/chat'
+import Header from '@/components/header'
 // removed ResetIcon (quote uses lucide-react's Quote icon)
 
-type Message = { userId: string; username: string; text: string; ts: number }
+type Message = ChatMessage
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? 'http://localhost:5000'
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? 'http://localhost:5000'
@@ -24,6 +32,16 @@ export default function MainChat() {
   const [registerError, setRegisterError] = useState(false)
   const [copied, setCopied] = useState(false)
   const [quoted, setQuoted] = useState<Message | null>(null)
+  const [isConnected, setIsConnected] = useState(false)
+  const [typingUsers, setTypingUsers] = useState<Record<string, number>>({})
+  const typingTimeoutRef = useRef<number | null>(null)
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null)
+  const [ownerId, setOwnerId] = useState<string | null>(null)
+  const [isOwner, setIsOwner] = useState(false)
+  const [membersOpen, setMembersOpen] = useState(false)
+  const [members, setMembers] = useState<{ userId: string; username: string }[]>([])
+  const membersOpenRef = useRef(false)
+  useEffect(() => { membersOpenRef.current = membersOpen }, [membersOpen])
   useEffect(() => {
     const savedToken = localStorage.getItem('token') || ''
     const savedRoomId = localStorage.getItem('roomId') || ''
@@ -58,6 +76,21 @@ export default function MainChat() {
  
     }
     fetch_message()
+    // fetch room info (owner and whether current user is owner)
+    const fetch_room_info = async () => {
+      const res = await fetch(`${API_BASE}/api/rooms/${roomId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const info = await res.json() as { roomId: string; ownerId: string; isOwner: boolean }
+        setOwnerId(info.ownerId)
+        setIsOwner(info.isOwner)
+      } else {
+        setOwnerId(null)
+        setIsOwner(false)
+      }
+    }
+    fetch_room_info()
 
     if (socketRef.current) {
       socketRef.current.disconnect()
@@ -68,20 +101,74 @@ export default function MainChat() {
 
     socket.emit('room:join', { roomId })
 
+    socket.on('connect', () => setIsConnected(true))
+    socket.on('disconnect', () => setIsConnected(false))
+
     socket.on('room:message', (msg: { roomId: string; userId: string; username: string; text: string; ts: number }) => {
       setMessages((m) => [...m, { userId: msg.userId, username: msg.username, text: msg.text, ts: msg.ts }])
     })
 
     socket.on('user:joined', ({ username }) => {
       setMessages((m) => [...m, { userId: 'system', username: 'system', text: `${username} joined`, ts: Date.now() }])
+      if (membersOpenRef.current && socketRef.current && roomId) {
+        socketRef.current.emit('room:members', { roomId }, (resp: { ownerId: string; members: { userId: string; username: string }[] } | null) => {
+          if (resp?.members) setMembers(resp.members)
+        })
+      }
     })
 
     socket.on('user:left', ({ username }) => {
       setMessages((m) => [...m, { userId: 'system', username: 'system', text: `${username} left`, ts: Date.now() }])
+      if (membersOpenRef.current && socketRef.current && roomId) {
+        socketRef.current.emit('room:members', { roomId }, (resp: { ownerId: string; members: { userId: string; username: string }[] } | null) => {
+          if (resp?.members) setMembers(resp.members)
+        })
+      }
+    })
+
+    socket.on('user:typing', ({ username, isTyping }: { roomId: string; userId: string; username: string; isTyping: boolean }) => {
+      setTypingUsers((prev) => {
+        const next = { ...prev }
+        if (isTyping) {
+          next[username] = Date.now() + 2000
+        } else {
+          delete next[username]
+        }
+        return next
+      })
+    })
+    socket.on('user:kicked', ({ roomId: kickedRoom }: { roomId: string }) => {
+      if (kickedRoom === roomId) {
+        setMessages([])
+        setRoomId('')
+        localStorage.removeItem('roomId')
+      }
     })
 
     return () => { socket.disconnect() }
   }, [token, roomId])
+  
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setTypingUsers((prev) => {
+        const now = Date.now()
+        const next: Record<string, number> = {}
+        let changed = false
+        for (const [name, until] of Object.entries(prev)) {
+          if (until > now) next[name] = until
+          else changed = true
+        }
+        return changed ? next : prev
+      })
+    }, 500)
+    return () => window.clearInterval(id)
+  }, [])
+  
+  useEffect(() => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight
+    }
+  }, [messages])
     
   function sendMessage() {
     const text = input.trim()
@@ -91,6 +178,20 @@ export default function MainChat() {
     setInput('')
     setQuoted(null)
   } 
+  
+  function handleInputChange(value: string) {
+    setInput(value)
+    if (!socketRef.current || !roomId) return
+    socketRef.current.emit('room:typing', { roomId, isTyping: true })
+    if (typingTimeoutRef.current) {
+      window.clearTimeout(typingTimeoutRef.current)
+    }
+    typingTimeoutRef.current = window.setTimeout(() => {
+      socketRef.current?.emit('room:typing', { roomId, isTyping: false })
+      typingTimeoutRef.current = null
+    }, 1500)
+  }
+  // CornerPlus removed (moved styling into components)
     
   function leaveRoom() {
     if (!socketRef.current || !roomId) return
@@ -116,14 +217,25 @@ export default function MainChat() {
     setQuoted(null)
   }
 
-  function parseQuotedText(text: string): { quote: string | null; body: string } {
-    const parts = text.split('\n')
-    const first = parts[0] ?? ''
-    if (first.startsWith('> ')) {
-      return { quote: first.slice(2), body: parts.slice(1).join('\n') }
-    }
-    return { quote: null, body: text }
+  function kickUser(targetUserId: string) {
+    if (!socketRef.current || !roomId) return
+    socketRef.current.emit('room:kick', { roomId, targetUserId }, () => {})
   }
+  
+  function toggleMembers() {
+    setMembersOpen((prev) => {
+      const next = !prev
+      if (next && socketRef.current && roomId) {
+        socketRef.current.emit('room:members', { roomId }, (resp: { ownerId: string; members: { userId: string; username: string }[] } | null) => {
+          if (resp?.members) setMembers(resp.members)
+          if (resp?.ownerId) setOwnerId(resp.ownerId)
+        })
+      }
+      return next
+    })
+  }
+
+  // parseQuotedText moved into MessagesList component
 
   const handleLogin = async () => {
     try {
@@ -174,247 +286,88 @@ export default function MainChat() {
 
   return (
     <main className="w-full min-h-screen bg-neutral-900 relative overflow-hidden font-mono">
+      <Header/>
       {/* Pixel Art Background Pattern */}
-      <div className="absolute inset-0 opacity-[0.03]" style={{
-        backgroundImage: `
-          repeating-linear-gradient(0deg, #fff 0px, #fff 4px, transparent 4px, transparent 8px),
-          repeating-linear-gradient(90deg, #fff 0px, #fff 4px, transparent 4px, transparent 8px)
-        `,
-        backgroundSize: '32px 32px'
-      }}></div>
+      <img src={"/home-bg.png"} alt="background" className="absolute inset-0 mix-blend-screen right-0 object-cover object-right-bottom opacity-70 pointer-events-none" loading="lazy" width={1000} height={1000} />
       
       {/* Pixel Door Decoration */}
    
 
       {/* Main Content Container */}
       <div className="relative z-10 flex items-center justify-center min-h-screen p-6">
-        <div className="w-full max-w-2xl">
+        <div className="w-full max-w-lg">
           
     
 
           {/* Main Card */}
-          <div className="bg-neutral-900 rounded-lg border border-neutral-800 shadow-2xl overflow-hidden">
+          <div className=" rounded-lg border border-neutral-800 shadow-2xl overflow-hidden">
             
             {/* AUTH SCREEN - Show when not authenticated */}
             {!isAuthed ? (
-              <div className="p-8">
-               
-                
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs uppercase tracking-wider text-neutral-400 mb-2">
-                      Username
-                    </label>
-                    <input 
-                      type="text" 
-                      placeholder="enter username"
-                      value={username} 
-                      onChange={(e) => setUsername(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (isRegister ? handleRegister() : handleLogin())}
-                      className="w-full bg-neutral-900 border border-neutral-800 rounded-sm px-4 py-3 text-neutral-100 placeholder-neutral-600 text-sm focus:outline-none focus:border-violet-500/60 transition-colors"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs uppercase tracking-wider text-neutral-400 mb-2">
-                      Password
-                    </label>
-                    <input 
-                      type="password" 
-                      placeholder="enter password"
-                      value={password} 
-                      onChange={(e) => setPassword(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (isRegister ? handleRegister() : handleLogin())}
-                      className="w-full bg-neutral-900 border border-neutral-800 rounded-sm px-4 py-3 text-neutral-100 placeholder-neutral-600 text-sm focus:outline-none focus:border-violet-500/60 transition-colors"
-                    />
-                  </div>
-
-                  <button 
-                    onClick={isRegister ? handleRegister : handleLogin}
-                    disabled={!username.trim() || !password.trim()}
-                    className="w-full cursor-pointer bg-violet-300 hover:bg-violet-400 disabled:bg-neutral-800 disabled:text-neutral-600 text-neutral-900 py-3 rounded-sm transition-colors duration-200 flex items-center justify-center gap-2 font-medium"
-                  >
-                    {isRegister ? (
-                      <>
-                        <UserPlus className="w-4 h-4" />
-                        Register
-                      </>
-                    ) : (
-                      <>
-                        <LogIn className="w-4 h-4" />
-                        Login
-                      </>
-                    )}
-                    
-                  </button>
-                  <div className="flex justify-center"> 
-                    {loginError &&(
-                      <p className="text-red-500 text-sm">Invalid username or password</p>
-                    )}
-                    {registerError &&(
-                      <p className="text-red-500 text-sm">Username already exists</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Toggle between login/register */}
-                <div className="mt-6 text-center">
-                  <button 
-                    onClick={() => setIsRegister(!isRegister)}
-                    className="text-sm text-neutral-500 hover:text-neutral-300 transition-colors"
-                  >
-                    {isRegister ? 'Already have an account? Login' : "Don't have an account? Register"}
-                  </button>
-                </div>
+              <div className="py-6 sm:px-6">
+                <AuthForm
+                  username={username}
+                  password={password}
+                  isRegister={isRegister}
+                  loginError={loginError}
+                  registerError={registerError}
+                  onUsernameChange={setUsername}
+                  onPasswordChange={setPassword}
+                  onSubmit={isRegister ? handleRegister : handleLogin}
+                  onToggleRegister={() => setIsRegister(!isRegister)}
+                />
               </div>
             ) : (
               /* CHAT INTERFACE - Show when authenticated */
               <div>
                 {!isInRoom ? (
-                  <div className="p-8">
-                    {/* User info and logout */}
-                    <div className="flex justify-end mb-6">
-                      <button 
-                        onClick={handleLogout}
-                        className="text-neutral-400 hover:text-neutral-200 transition-colors flex items-center gap-2 text-sm"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        Logout
-                      </button>
-                    </div>
-                    <div className="mb-8">
-                      <label className="block text-xs uppercase tracking-wider text-neutral-400 mb-3">
-                        Enter Room ID
-                      </label>
-                      <div className="flex gap-2">
-                        <input 
-                          value={joinRoomId}
-                          onChange={(e) => setJoinRoomId(e.target.value)}
-                          type="text" 
-                          placeholder="room id"
-                          className="flex-1 bg-neutral-900 border border-neutral-800 rounded-sm px-4 py-3 text-neutral-100 placeholder-neutral-600 text-sm focus:outline-none focus:border-violet-500/60 transition-colors"
-                          onKeyDown={(e) => e.key === 'Enter' && joinRoom()}
-                        />
-                        <button 
-                          onClick={joinRoom}
-                          disabled={!joinRoomId.trim()}
-                          className="bg-neutral-800 hover:bg-neutral-700 disabled:bg-neutral-900 disabled:text-neutral-700 text-neutral-200 px-5 rounded-sm transition-colors duration-200 flex items-center gap-2 border border-neutral-800"
-                        >
-                          <ArrowRight className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="relative my-8">
-                      <div className="absolute inset-0 flex items-center">
-                        <div className="w-full border-t border-neutral-700"></div>
-                      </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-neutral-800 px-3 text-neutral-500 tracking-wider">or</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-xs uppercase tracking-wider text-neutral-400 mb-3">
-                        Create New Room
-                      </label>
-                      <button 
-                        onClick={createRoom}
-                        className="w-full bg-violet-300 hover:bg-violet-400 text-neutral-900 py-3 rounded-sm transition-colors duration-200 flex items-center justify-center gap-2 font-medium"
-                      >
-                        <Plus className="w-4 h-4" />
-                        New Backroom
-                      </button>
-                    </div>
-                  </div>
+                  <RoomGate
+                    joinRoomId={joinRoomId}
+                    onJoinRoomIdChange={setJoinRoomId}
+                    onJoin={joinRoom}
+                    onCreate={createRoom}
+                    onLogout={handleLogout}
+                  />
                 ) : (
-                  <div className="p-8">
-                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-neutral-700">
-                      <div className="flex items-center gap-2">
-                        
-                        <span className="text-xs text-neutral-500 font-mono">{roomId}</span>
-                        {copied ?( <span className="text-xs text-neutral-400 font-mono">Copied</span>): (
-                             <Copy className="w-3 h-3 text-neutral-400 cursor-pointer mr-3 sm:mr-0" onClick = {()=>{
-                              setCopied(true)
-                              navigator.clipboard.writeText(roomId)
-                              setTimeout(()=>{
-                                setCopied(false)
-                              }, 2000)
-                            }} />
-                        )}
-                    
-
-                      </div>
-                      <button 
-                        onClick={leaveRoom}
-                        className="text-neutral-400 hover:text-neutral-200 transition-colors p-1"
-                        title="Leave room"
-                      >
-                        <LogOut className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="mb-4 h-[61vh] md:h-[66vh] overflow-y-auto space-y-3 scrollbar-hidden px-3">
-                      {messages.length === 0 ? (
-                        <div className="text-center text-neutral-600 text-sm py-12">
-                          No messages yet.
-                        </div>
-                      ) : (
-                        messages.map((msg, i) => (
-                          <div key={i} className={msg.userId === 'system' ? 'text-center' : ''}>
-                            {msg.userId === 'system' ? (
-                              <span className="text-xs text-neutral-600 italic">{msg.text}</span>
-                            ) : (
-                              <div className="space-y-1">
-                                <div className="text-xs text-neutral-50 border-b border-neutral-700 w-fit uppercase">{msg.username.toUpperCase()}</div>
-                                {(() => {
-                                  const parsed = parseQuotedText(msg.text)
-                                  return (
-                                    <div className="flex items-center gap-2">
-                                      <div className="text-sm text-black w-fit px-4 py-2 bg-gray-50 rounded-md">
-                                        {parsed.quote && (
-                                          <div className="mb-2 pl-2 border-l-2 border-neutral-300 text-neutral-600 text-xs">
-                                            {parsed.quote}
-                                          </div>
-                                        )}
-                                        <div>{parsed.body}</div>
-                                      </div>
-                                      <div>
-                                        <Quote className="size-3 text-neutral-400 cursor-pointer" onClick={() => quoteMessage(msg)} />
-                                      </div>
-                                    </div>
-                                  )
-                                })()}
-                              </div>
-                            )}
-                          </div>
-                        ))
-                      )}
-                    </div>
-                    {quoted && (
-                      <div className="mb-2 w-60">
-                        <div className="flex items-center justify-between bg-neutral-7=900 border border-neutral-700 rounded-sm p-2">
-                          <div className="text-xs text-neutral-300">
-                            <span className="uppercase text-neutral-400">{quoted.username}</span>: {quoted.text}
-                          </div>
-                          <button onClick={clearQuote} className="text-neutral-500 hover:text-neutral-300 text-xs">X</button>
-                        </div>
+                  <div className="p-8 ">
+                    <ChatHeader
+                      roomId={roomId}
+                      copied={copied}
+                      isConnected={isConnected}
+                      onCopy={() => {
+                        setCopied(true)
+                        navigator.clipboard.writeText(roomId)
+                        setTimeout(() => setCopied(false), 2000)
+                      }}
+                      onToggleMembers={toggleMembers}
+                      onLeave={leaveRoom}
+                    />
+                    <MembersPanel
+                      open={membersOpen}
+                      members={members}
+                      ownerId={ownerId}
+                      isOwner={isOwner}
+                      onKick={kickUser}
+                      className="mb-2 px-3"
+                    />
+                    <MessagesList
+                      ref={messagesContainerRef as React.MutableRefObject<HTMLDivElement | null>}
+                      messages={messages}
+                      ownerId={ownerId}
+                      onQuote={quoteMessage}
+                    />
+                    {Object.keys(typingUsers).length > 0 && (
+                      <div className="px-3 pb-2 text-xs text-neutral-500">
+                        {Object.keys(typingUsers).slice(0, 3).join(', ')} {Object.keys(typingUsers).length > 1 ? 'are' : 'is'} typing...
                       </div>
                     )}
-                    <div className="flex gap-2">
-                      <input 
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-                        type="text"
-                        placeholder="message..."
-                        className="flex-1 border border-neutral-800 rounded-sm px-4 py-3 text-neutral-100 placeholder-neutral-600 text-sm focus:outline-none focus:border-violet-500/60 transition-colors"
-                      />
-                      <button 
-                        onClick={sendMessage}
-                        disabled={!input.trim()}
-                        className="cursor-pointer bg-violet-300 hover:bg-violet-400 disabled:bg-neutral-800 disabled:text-neutral-600 text-neutral-900 p-4 rounded-full transition-colors duration-200"
-                      >
-                        <ArrowRight className="w-4 h-4" />
-                      </button>
-                    </div>
+                    <MessageInput
+                      input={input}
+                      quoted={quoted}
+                      onInputChange={handleInputChange}
+                      onSend={sendMessage}
+                      onClearQuote={clearQuote}
+                    />
                   </div>
                 )}
               </div>

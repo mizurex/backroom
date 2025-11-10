@@ -12,5 +12,8 @@ const roomSchema = new Schema<RoomDocument>({
   members: [{ type: Schema.Types.ObjectId, ref: 'User' }],
 }, { timestamps: true });
 
+// Auto-delete rooms 4 hours after last activity (updatedAt)
+roomSchema.index({ updatedAt: 1 }, { expireAfterSeconds: 60 * 60 * 4 });
+
 export const RoomModel = mongoose.model<RoomDocument>('Room', roomSchema);
 

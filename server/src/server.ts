@@ -9,6 +9,7 @@ import roomRoutes from './routes/room';
 import { createSocketServer } from './socket';
 
 async function main() {
+  const PORT = process.env.PORT || 3000;
   await connectMongo();
 
   const app = express();
@@ -24,7 +25,7 @@ async function main() {
   createSocketServer(server);
 
   server.listen(env.port, () => {
-    console.log(`Server listening on http://localhost:${env.port}`);
+    console.log(`Server listening on http://localhost:${PORT}`);
   });
 }
 
